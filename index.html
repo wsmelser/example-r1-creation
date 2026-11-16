@@ -25,30 +25,94 @@
   #app.landscape { padding: 10px 12px; }
   #app.landscape #body { font-size: 11px; line-height: 1.4; margin-top: 6px; }
   #app.landscape h1 { font-size: 14px; }
-  h1 { font-size: 15px; font-weight: 600; letter-spacing: .02em; }
-  #hint { font-size: 10px; color: var(--dim); margin-top: 2px; }
-  #body { flex: 1; margin-top: 10px; font-size: 12px; line-height: 1.45; overflow: hidden; }
+
+  button {
+    font: inherit; color: inherit; background: none; border: 0;
+    padding: 0; margin: 0; cursor: pointer;
+    -webkit-appearance: none; appearance: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  #top { display: flex; align-items: center; gap: 8px; flex: 0 0 auto; }
+  h1 { font-size: 15px; font-weight: 600; letter-spacing: .02em; flex: 1 1 auto; }
+  #hint { font-size: 10px; color: var(--dim); margin-top: 2px; flex: 0 0 auto; }
+  #body { flex: 1 1 auto; min-height: 0; margin-top: 10px; font-size: 12px; line-height: 1.45; overflow: hidden; }
   #body ul { padding-left: 14px; }
   #body li { margin-bottom: 6px; }
-  #status { font-size: 10px; color: var(--dim); height: 12px; }
+  #status { font-size: 10px; color: var(--dim); height: 12px; flex: 0 0 auto; }
   .fade { transition: opacity 180ms ease-out, transform 180ms ease-out; }
   .hidden { opacity: 0; transform: translateY(6px); pointer-events: none; }
+
   #spinner {
-    position: absolute; right: 14px; top: 14px; width: 10px; height: 10px;
+    flex: 0 0 auto; width: 10px; height: 10px;
     border: 2px solid var(--dim); border-top-color: var(--accent); border-radius: 50%;
     opacity: 0; transition: opacity 150ms ease-out;
   }
   #spinner.on { opacity: 1; animation: spin 700ms linear infinite; }
   @keyframes spin { to { transform: rotate(360deg); } }
+
+  #camBtn {
+    flex: 0 0 auto; width: 44px; height: 44px;
+    display: flex; align-items: center; justify-content: center;
+    border: 1px solid #2c2c36; border-radius: 10px;
+    color: var(--fg); opacity: 1;
+    transition: opacity 120ms ease-out;
+  }
+  #camBtn:active { opacity: .55; }
+
+  #cam {
+    position: absolute; left: 0; top: 0; right: 0; bottom: 0;
+    display: flex; flex-direction: column;
+    background: #000;
+    opacity: 0; pointer-events: none;
+    transition: opacity 160ms ease-out;
+  }
+  #cam.on { opacity: 1; pointer-events: auto; }
+  #camVideo {
+    flex: 1 1 0; min-height: 0; width: 100%;
+    object-fit: cover; background: #000; display: block;
+  }
+  #camBar {
+    flex: 0 0 auto; display: flex; align-items: center; gap: 8px;
+    padding: 6px 8px;
+  }
+  #camStatus { flex: 1 1 auto; font-size: 10px; line-height: 1.3; color: var(--dim); }
+  #camClose {
+    flex: 0 0 auto; width: 44px; height: 44px;
+    display: flex; align-items: center; justify-content: center;
+    border: 1px solid #2c2c36; border-radius: 10px;
+    color: var(--fg); opacity: 1;
+    transition: opacity 120ms ease-out;
+  }
+  #camClose:active { opacity: .55; }
 </style>
 </head>
 <body>
 <div id="app">
-  <h1>Owl Facts</h1>
+  <div id="top">
+    <h1>Owl Facts</h1>
+    <div id="spinner"></div>
+    <button id="camBtn" type="button" aria-label="Open camera" aria-pressed="false">
+      <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" focusable="false">
+        <path d="M4 8h3l1.5-2h7L17 8h3a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
+        <circle cx="12" cy="13" r="3.2" fill="none" stroke="currentColor" stroke-width="1.6"/>
+      </svg>
+    </button>
+  </div>
   <div id="hint">Tap the side button for a fact</div>
-  <div id="spinner"></div>
   <div id="body" class="fade"><p>Ready.</p></div>
   <div id="status"></div>
+  <div id="cam">
+    <video id="camVideo" playsinline muted autoplay></video>
+    <div id="camBar">
+      <span id="camStatus">camera</span>
+      <button id="camClose" type="button" aria-label="Close camera">
+        <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false">
+          <path d="M6 6l12 12M18 6L6 18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+        </svg>
+      </button>
+    </div>
+  </div>
 </div>
 
 <script>
@@ -111,6 +175,16 @@
   }
   function setStatus(t) { statusEl.textContent = t || ""; }
   function busy(on) { spinner.classList.toggle("on", !!on); }
+
+  var statusTimer = null;
+  function flashStatus(t) {
+    setStatus(t);
+    if (statusTimer) clearTimeout(statusTimer);
+    statusTimer = setTimeout(function () {
+      statusTimer = null;
+      setStatus(count ? "fact " + count : "");
+    }, 1200);
+  }
 
   // ---- LLM call ---------------------------------------------------------
   var pending = null;
@@ -208,7 +282,7 @@
   var rotateOn = true;
   var currentDeg = 0;
   var applied = false;
-  var calib = null;    // orientation seen when the page settled after launch
+  var calib = null;    // the pose treated as upright
   var LANDSCAPE_SIGN = 1;   // flip to -1 if landscape reads upside-down
 
   function applyOrientation(deg) {
@@ -235,12 +309,53 @@
     return (u.x > 0 ? -90 : 90) * LANDSCAPE_SIGN;
   }
 
-  // Whatever pose the page is in when it first settles becomes upright. This
-  // absorbs both the unknown sign convention of the axes and the case of
-  // launching the creation while already holding the r1 sideways.
   function normaliseDeg(d) {
     var v = ((d % 360) + 360) % 360;
     return v === 180 ? 180 : (v === 90 ? 90 : (v === 270 ? -90 : 0));
+  }
+
+  // ---- calibration ------------------------------------------------------
+  // The pose that counts as upright is measured, not assumed. A short burst of
+  // samples is averaged so a single noisy reading cannot set it, and the same
+  // routine runs at launch and on a triple tap. That is what makes opening the
+  // creation while already holding the r1 sideways work: the pose you are
+  // holding it in becomes upright.
+  var CALIB_SAMPLES = 8;      // ~270 ms at 30 Hz
+  var CALIB_TIMEOUT = 3000;   // give up if no usable reading arrives
+
+  var calibBuf = null;        // array of unit vectors while measuring
+  var calibTimer = null;
+  var calibQuiet = false;     // true for the launch measurement: no status text
+
+  function startCalib(quiet) {
+    calibBuf = [];
+    calibQuiet = !!quiet;
+    candidate = 0;
+    streak = 0;
+    if (calibTimer) clearTimeout(calibTimer);
+    // Show upright straight away: the pose about to be measured is the one the
+    // user is holding, so leaving the old rotation on screen during the ~270 ms
+    // sample burst just looks like the tap was ignored.
+    applyOrientation(0);
+    if (!quiet) setStatus("hold still…");
+    calibTimer = setTimeout(function () {
+      calibTimer = null;
+      if (calibBuf !== null) {
+        calibBuf = null;
+        if (!calibQuiet) flashStatus("no tilt reading");
+      }
+    }, CALIB_TIMEOUT);
+  }
+
+  function finishCalib(pose) {
+    calibBuf = null;
+    if (calibTimer) { clearTimeout(calibTimer); calibTimer = null; }
+    calib = pose;
+    dirPrimed = false;        // restart smoothing from the new pose
+    candidate = 0;
+    streak = 0;
+    applyOrientation(0);
+    if (!calibQuiet) flashStatus("upright set");
   }
 
   // ---- accelerometer (optional) ----------------------------------------
@@ -338,6 +453,25 @@
       clearScreen();
     }
 
+    // --- calibration: average a short burst, then call that pose upright ---
+    if (calibBuf !== null) {
+      calibBuf.push(u);
+      if (calibBuf.length >= CALIB_SAMPLES) {
+        var ax = 0, ay = 0, az = 0;
+        for (var i = 0; i < calibBuf.length; i++) {
+          ax += calibBuf[i].x; ay += calibBuf[i].y; az += calibBuf[i].z;
+        }
+        var avg = toUnit({ x: ax, y: ay, z: az });
+        var pose = avg ? orientationOf(avg) : null;
+        if (pose === null) {
+          calibBuf = [];      // flat on a table or mid-turn: keep sampling
+        } else {
+          finishCalib(pose);
+        }
+      }
+      return;
+    }
+
     // --- tilt: smoothed direction, committed on a threshold crossing ---
     if (!dirPrimed) { sx = u.x; sy = u.y; sz = u.z; dirPrimed = true; }
     else {
@@ -354,7 +488,7 @@
     var raw = orientationOf({ x: sx / sm, y: sy / sm, z: sz / sm });
     if (raw === null) return;
 
-    if (calib === null) { calib = raw; return; }
+    if (calib === null) return;
 
     var o = normaliseDeg(raw - calib);
     if (o === currentDeg) { streak = 0; return; }
@@ -381,7 +515,6 @@
     if (accelHandle) { try { accelHandle.stop(); } catch (e) {} accelHandle = null; }
     accelStarted = false;
   }
-  window.addEventListener("pagehide", stopAccel);
 
   // ---- audio (optional) -------------------------------------------------
   // A short pitched ding on each scroll, synthesised with Web Audio so there
@@ -473,11 +606,106 @@
     };
   })();
 
+  // ---- camera (optional) ------------------------------------------------
+  // The guide says camera access is an ordinary web API (getUserMedia), not a
+  // bridge call. Whether the r1's WebView actually grants it to a creation is
+  // not documented anywhere, so every step is defensive: a missing
+  // mediaDevices, a rejected promise and a throwing call all end in a readable
+  // status line instead of an exception, and every track is stopped on close,
+  // on pagehide and when the page is hidden.
+  var camEl     = document.getElementById("cam");
+  var camVideo  = document.getElementById("camVideo");
+  var camStatus = document.getElementById("camStatus");
+  var camBtn    = document.getElementById("camBtn");
+  var camClose  = document.getElementById("camClose");
+
+  var cam = { open: false, stream: null };
+
+  function setCamStatus(t) { if (camStatus) camStatus.textContent = t || ""; }
+
+  function camSupported() {
+    return !!(navigator && navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
+  }
+
+  function stopStream(s) {
+    if (!s) return;
+    var tracks = [];
+    try { tracks = s.getTracks ? s.getTracks() : []; } catch (e) { tracks = []; }
+    for (var i = 0; i < tracks.length; i++) {
+      try { tracks[i].stop(); } catch (e) {}
+    }
+  }
+
+  function stopCam() {
+    if (cam.stream) { stopStream(cam.stream); cam.stream = null; }
+    try {
+      if (camVideo) {
+        if (camVideo.pause) camVideo.pause();
+        camVideo.srcObject = null;
+      }
+    } catch (e) {}
+  }
+
+  function camErrorText(err) {
+    var name = (err && err.name) || "";
+    if (name === "NotAllowedError" || name === "PermissionDeniedError") return "camera permission denied";
+    if (name === "NotFoundError" || name === "DevicesNotFoundError") return "no camera found";
+    if (name === "NotReadableError" || name === "TrackStartError") return "camera is busy";
+    if (name === "SecurityError") return "camera blocked by the page";
+    if (name === "OverconstrainedError") return "camera does not support this mode";
+    return "camera unavailable";
+  }
+
+  function openCam() {
+    if (cam.open) return;
+    cam.open = true;
+    if (camEl) camEl.classList.add("on");
+    if (camBtn) camBtn.setAttribute("aria-pressed", "true");
+    setCamStatus("starting camera…");
+
+    if (!camSupported()) { setCamStatus("camera not available here"); return; }
+
+    var req;
+    try {
+      req = navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" }, audio: false });
+    } catch (e) {
+      setCamStatus(camErrorText(e));
+      return;
+    }
+
+    Promise.resolve(req).then(function (stream) {
+      if (!cam.open) { stopStream(stream); return; }   // closed while waiting
+      cam.stream = stream;
+      try { camVideo.srcObject = stream; } catch (e) {}
+      try {
+        var p = camVideo.play && camVideo.play();
+        if (p && p.catch) p.catch(function () {});
+      } catch (e) {}
+      setCamStatus("");
+    }).catch(function (err) {
+      setCamStatus(camErrorText(err));
+    });
+  }
+
+  function closeCam() {
+    var was = cam.open;
+    cam.open = false;
+    if (camEl) camEl.classList.remove("on");
+    if (camBtn) camBtn.setAttribute("aria-pressed", "false");
+    stopCam();
+    setCamStatus("");
+    return was;
+  }
+
+  if (camBtn) camBtn.addEventListener("click", function () { openCam(); });
+  if (camClose) camClose.addEventListener("click", function () { closeCam(); });
+
   // ---- input ------------------------------------------------------------
-  // One tap: a fact. Two taps: close. Three taps: tilt-to-rotate on/off.
+  // One tap: a fact. Two taps: close the camera, or the creation.
+  // Three taps: re-read the accelerometer and make the current pose upright
+  // (and turn tilt back on if it was off). Four taps: tilt off.
   var tapCount = 0;
   var tapTimer = null;
-  var statusTimer = null;
 
   window.addEventListener("sideClick", function () {
     audio.unlock();   // first gesture unlocks audio; later ones resume it
@@ -489,13 +717,15 @@
       tapTimer = null;
       if (n === 1) onSingleTap();
       else if (n === 2) onDoubleTap();
-      else onTripleTap();
+      else if (n === 3) onTripleTap();
+      else onQuadTap();
     }, 350);
   });
 
   function onSingleTap() { fetchFact(); }
 
   function onDoubleTap() {
+    if (cam.open) { closeCam(); return; }
     if (bridge.hasClose) {
       try { window.closeWebView.postMessage(""); } catch (e) {}
     } else {
@@ -504,17 +734,22 @@
   }
 
   function onTripleTap() {
-    rotateOn = !rotateOn;
-    if (!rotateOn) applyOrientation(0);
+    rotateOn = true;
+    store.set("prefs", { rotate: true });
+    if (!bridge.hasSensors) { flashStatus("no tilt sensor"); return; }
+    startAccel();
+    startCalib(false);
+  }
+
+  function onQuadTap() {
+    rotateOn = false;
+    calibBuf = null;
+    if (calibTimer) { clearTimeout(calibTimer); calibTimer = null; }
     candidate = 0;
     streak = 0;
-    setStatus(rotateOn ? "tilt on" : "tilt off");
-    store.set("prefs", { rotate: rotateOn });
-    if (statusTimer) clearTimeout(statusTimer);
-    statusTimer = setTimeout(function () {
-      statusTimer = null;
-      setStatus(count ? "fact " + count : "");
-    }, 1200);
+    applyOrientation(0);
+    store.set("prefs", { rotate: false });
+    flashStatus("tilt off");
   }
 
   window.addEventListener("longPressStart", function () {
@@ -544,6 +779,18 @@
     setStatus(ok ? "▼" : "▼ no audio");
   });
 
+  // ---- teardown ---------------------------------------------------------
+  // The camera light must not stay on: stop the sensor and every media track
+  // when the page goes away or is backgrounded.
+  window.addEventListener("pagehide", function () {
+    stopAccel();
+    closeCam();
+  });
+
+  document.addEventListener("visibilitychange", function () {
+    if (document.hidden) closeCam();
+  });
+
   // ---- boot -------------------------------------------------------------
   store.get("state").then(function (s) {
     if (s && s.count) {
@@ -559,6 +806,7 @@
   }).catch(function () {}).then(function () {
     applyOrientation(0);
     startAccel();
+    if (rotateOn) startCalib(true);
   });
 })();
 </script>
