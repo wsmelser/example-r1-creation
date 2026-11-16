@@ -6,7 +6,7 @@
 <title>Owl Facts</title>
 <style>
   :root { --bg:#101014; --fg:#f4f1ea; --dim:#8b8b96; --accent:#ffb347; }
-  \\\* { box-sizing: border-box; margin: 0; padding: 0; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
   html, body {
     width: 240px; height: 282px; overflow: hidden;
     background: var(--bg); color: var(--fg);
@@ -48,8 +48,8 @@
   // ---- bridge detection -------------------------------------------------
   var bridge = {
     hasPlugin:  typeof window.PluginMessageHandler !== "undefined",
-    hasStorage: !!(window.creationStorage \\\&\\\& window.creationStorage.plain),
-    hasSensors: !!(window.creationSensors \\\&\\\& window.creationSensors.accelerometer),
+    hasStorage: !!(window.creationStorage && window.creationStorage.plain),
+    hasSensors: !!(window.creationSensors && window.creationSensors.accelerometer),
     hasClose:   typeof window.closeWebView !== "undefined",
     hasVoice:   typeof window.CreationVoiceHandler !== "undefined"
   };
@@ -163,7 +163,7 @@
       'Reply ONLY with JSON: {"fact":"..."}',
       { speak: false }
     ).then(function (res) {
-      var fact = (res.json \\\&\\\& res.json.fact) || res.text || "No fact came back.";
+      var fact = (res.json && res.json.fact) || res.text || "No fact came back.";
       count += 1;
       render("<p>" + escapeHtml(fact) + "</p>");
       setStatus("fact " + count);
@@ -175,8 +175,8 @@
   }
 
   function escapeHtml(s) {
-    return String(s).replace(/\\\[\\\&<>"']/g, function (c) {
-      return { "\\\&": "\\\&amp;", "<": "\\\&lt;", ">": "\\\&gt;", '"': "\\\&quot;", "'": "\\\&#39;" }\\\[c];
+    return String(s).replace(/[&<>"']/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
     });
   }
 
@@ -254,7 +254,7 @@
       accelHandle = accel;
       accel.start(function (d) {
         var a = readAccel(d);
-        if (a \\\&\\\& a.z < -0.6) setStatus("face down");
+        if (a && a.z < -0.6) setStatus("face down");
       }, { frequency: 30 });
     }).catch(function () {});
   }
@@ -265,7 +265,7 @@
 
   // ---- boot -------------------------------------------------------------
   store.get("state").then(function (s) {
-    if (s \\\&\\\& s.count) {
+    if (s && s.count) {
       count = s.count;
       setStatus("fact " + count);
     }
