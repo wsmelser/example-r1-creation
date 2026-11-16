@@ -455,7 +455,17 @@
   var currentDeg = 0;
   var applied = false;
   var calib = null;    // the pose treated as upright
-  var LANDSCAPE_SIGN = 1;   // flip to -1 if landscape reads upside-down
+  // Which way round the landscape pair goes. The four poses are encoded as
+  // 0 / -90 / 180 / +90 and the display angle is (raw - calib), so "raw" has to
+  // run opposite to the device's own rotation. Portrait (0) and upside-down
+  // (180) are fixed by the y axis and never touch this constant; only the two
+  // landscape poses do, and they are 180 degrees apart, so this one sign is the
+  // only free choice in the whole mapping. It encodes which way the
+  // accelerometer's +x points relative to the screen: +1 for +x to the screen's
+  // right, -1 for +x to the screen's left. The r1 reports the latter, so this
+  // is -1. Flipping it turns both landscape edges through 180 degrees at once
+  // and leaves portrait and upside-down untouched.
+  var LANDSCAPE_SIGN = -1;
 
   function applyOrientation(deg) {
     if (applied && deg === currentDeg) return;
@@ -475,9 +485,8 @@
     if (ax < 0.6 && ay < 0.6) return null;   // flat on a table, or mid-turn
     if (ay >= ax) return u.y < 0 ? 0 : 180;
     // Landscape: which sign means "readable" depends on whether +x points to
-    // the screen's right or left, which the docs do not settle. If the
-    // landscape view comes up upside-down relative to how you hold it, change
-    // LANDSCAPE_SIGN to -1.
+    // the screen's right or left, which the docs do not settle. LANDSCAPE_SIGN
+    // above carries that convention; it is -1 for the r1's accelerometer.
     return (u.x > 0 ? -90 : 90) * LANDSCAPE_SIGN;
   }
 
