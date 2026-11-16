@@ -25,6 +25,7 @@
   #app.landscape { padding: 10px 12px; }
   #app.landscape #body { font-size: 11px; line-height: 1.4; margin-top: 6px; }
   #app.landscape h1 { font-size: 14px; }
+  #app.landscape #foot { margin-top: 4px; }
 
   button {
     font: inherit; color: inherit; background: none; border: 0;
@@ -39,9 +40,35 @@
   #body { flex: 1 1 auto; min-height: 0; margin-top: 10px; font-size: 12px; line-height: 1.45; overflow: hidden; }
   #body ul { padding-left: 14px; }
   #body li { margin-bottom: 6px; }
-  #status { font-size: 10px; color: var(--dim); height: 12px; flex: 0 0 auto; }
+  #body img.shot {
+    display: block; width: 100%; height: 100%;
+    object-fit: contain; background: #000; border-radius: 8px;
+  }
   .fade { transition: opacity 180ms ease-out, transform 180ms ease-out; }
   .hidden { opacity: 0; transform: translateY(6px); pointer-events: none; }
+
+  #foot {
+    flex: 0 0 auto; display: flex; align-items: center; gap: 6px;
+    margin-top: 6px;
+  }
+  #status {
+    flex: 1 1 auto; min-width: 0; height: 12px; overflow: hidden;
+    font-size: 10px; line-height: 12px; color: var(--dim);
+  }
+  .iconbtn {
+    flex: 0 0 auto; width: 44px; height: 44px;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 2px;
+    border: 1px solid #2c2c36; border-radius: 10px;
+    color: var(--fg); opacity: 1;
+    transition: opacity 120ms ease-out;
+  }
+  .iconbtn .lbl {
+    font-size: 8px; line-height: 1; letter-spacing: .04em;
+    color: var(--dim); text-transform: uppercase;
+  }
+  .iconbtn:active { opacity: .55; }
+  .iconbtn.off { opacity: .45; }
 
   #spinner {
     flex: 0 0 auto; width: 10px; height: 10px;
@@ -73,18 +100,20 @@
     object-fit: cover; background: #000; display: block;
   }
   #camBar {
-    flex: 0 0 auto; display: flex; align-items: center; gap: 8px;
-    padding: 6px 8px;
+    flex: 0 0 auto; display: flex; flex-direction: column; gap: 4px;
+    padding: 6px 8px 8px;
   }
-  #camStatus { flex: 1 1 auto; font-size: 10px; line-height: 1.3; color: var(--dim); }
-  #camClose {
+  #camStatus { font-size: 10px; line-height: 1.3; color: var(--dim); min-height: 12px; }
+  #camBtns { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+  #camSwitch, #camShot, #camClose {
     flex: 0 0 auto; width: 44px; height: 44px;
     display: flex; align-items: center; justify-content: center;
     border: 1px solid #2c2c36; border-radius: 10px;
     color: var(--fg); opacity: 1;
     transition: opacity 120ms ease-out;
   }
-  #camClose:active { opacity: .55; }
+  #camSwitch:active, #camShot:active, #camClose:active { opacity: .55; }
+  #camSwitch.front { color: var(--accent); }
 </style>
 </head>
 <body>
@@ -101,16 +130,48 @@
   </div>
   <div id="hint">Tap the side button for a fact</div>
   <div id="body" class="fade"><p>Ready.</p></div>
-  <div id="status"></div>
+  <div id="foot">
+    <div id="status"></div>
+    <button id="recalBtn" class="iconbtn" type="button" aria-label="Set upright from the pose you are holding">
+      <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false">
+        <circle cx="12" cy="12" r="6.2" fill="none" stroke="currentColor" stroke-width="1.8"/>
+        <path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+      </svg>
+      <span class="lbl">upright</span>
+    </button>
+    <button id="tiltBtn" class="iconbtn" type="button" aria-label="Turn tilt off" aria-pressed="true">
+      <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false">
+        <rect x="8.5" y="3.5" width="7" height="17" rx="1.6" fill="none" stroke="currentColor" stroke-width="1.8"/>
+        <path d="M4 8.5a7.5 7.5 0 0 0 0 7M20 15.5a7.5 7.5 0 0 0 0-7" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+      </svg>
+      <span class="lbl">tilt</span>
+    </button>
+  </div>
   <div id="cam">
     <video id="camVideo" playsinline muted autoplay></video>
     <div id="camBar">
-      <span id="camStatus">camera</span>
-      <button id="camClose" type="button" aria-label="Close camera">
-        <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false">
-          <path d="M6 6l12 12M18 6L6 18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-        </svg>
-      </button>
+      <div id="camStatus">camera</div>
+      <div id="camBtns">
+        <button id="camSwitch" type="button" aria-label="Switch to front camera" aria-pressed="false">
+          <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" focusable="false">
+            <path d="M4.8 9.6a7.5 7.5 0 0 1 12.5-2.3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+            <path d="M17.9 3.5v3.9h-3.9" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M19.2 14.4a7.5 7.5 0 0 1-12.5 2.3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+            <path d="M6.1 20.5v-3.9h3.9" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </button>
+        <button id="camShot" type="button" aria-label="Take a photo">
+          <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" focusable="false">
+            <circle cx="12" cy="12" r="8" fill="none" stroke="currentColor" stroke-width="1.8"/>
+            <circle cx="12" cy="12" r="3.4" fill="currentColor"/>
+          </svg>
+        </button>
+        <button id="camClose" type="button" aria-label="Close camera">
+          <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false">
+            <path d="M6 6l12 12M18 6L6 18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          </svg>
+        </button>
+      </div>
     </div>
   </div>
 </div>
@@ -164,8 +225,15 @@
   var spinner  = document.getElementById("spinner");
 
   var renderToken = 0;
+  var lastHtml = "<p>Ready.</p>";
+  var shotUrl = null;          // the captured still, in memory for this session
+
   function render(html) {
+    // A fact in the body replaces any photo that was on screen.
+    shotUrl = null;
+    if (appEl) appEl.classList.remove("shot-mode");
     var token = ++renderToken;
+    lastHtml = html;
     bodyEl.classList.add("hidden");
     setTimeout(function () {
       if (token !== renderToken) return;
@@ -317,9 +385,9 @@
   // ---- calibration ------------------------------------------------------
   // The pose that counts as upright is measured, not assumed. A short burst of
   // samples is averaged so a single noisy reading cannot set it, and the same
-  // routine runs at launch and on a triple tap. That is what makes opening the
-  // creation while already holding the r1 sideways work: the pose you are
-  // holding it in becomes upright.
+  // routine runs at launch and when the on-screen "upright" button is tapped.
+  // That is what makes opening the creation while already holding the r1
+  // sideways work: the pose you are holding it in becomes upright.
   var CALIB_SAMPLES = 8;      // ~270 ms at 30 Hz
   var CALIB_TIMEOUT = 3000;   // give up if no usable reading arrives
 
@@ -407,6 +475,8 @@
     }
     busy(false);
     setStatus("");
+    shotUrl = null;
+    if (appEl) appEl.classList.remove("shot-mode");
     render("<p>Ready.</p>");
   }
 
@@ -607,19 +677,20 @@
   })();
 
   // ---- camera (optional) ------------------------------------------------
-  // The guide says camera access is an ordinary web API (getUserMedia), not a
-  // bridge call. Whether the r1's WebView actually grants it to a creation is
-  // not documented anywhere, so every step is defensive: a missing
+  // Camera access is an ordinary web API (getUserMedia), not a bridge call, and
+  // it is confirmed working on the r1. Every step is still defensive: a missing
   // mediaDevices, a rejected promise and a throwing call all end in a readable
   // status line instead of an exception, and every track is stopped on close,
-  // on pagehide and when the page is hidden.
-  var camEl     = document.getElementById("cam");
-  var camVideo  = document.getElementById("camVideo");
-  var camStatus = document.getElementById("camStatus");
-  var camBtn    = document.getElementById("camBtn");
-  var camClose  = document.getElementById("camClose");
+  // on pagehide, when the page is hidden, and when the facing mode changes.
+  var camEl      = document.getElementById("cam");
+  var camVideo   = document.getElementById("camVideo");
+  var camStatus  = document.getElementById("camStatus");
+  var camBtn     = document.getElementById("camBtn");
+  var camClose   = document.getElementById("camClose");
+  var camSwitch  = document.getElementById("camSwitch");
+  var camShotBtn = document.getElementById("camShot");
 
-  var cam = { open: false, stream: null };
+  var cam = { open: false, stream: null, facing: "environment", gen: 0, busy: false };
 
   function setCamStatus(t) { if (camStatus) camStatus.textContent = t || ""; }
 
@@ -636,7 +707,54 @@
     }
   }
 
+  function requestStream(mode) {
+    return navigator.mediaDevices.getUserMedia({ video: { facingMode: mode }, audio: false });
+  }
+
+  function playVideo() {
+    try {
+      var p = camVideo.play && camVideo.play();
+      if (p && p.catch) p.catch(function () {});
+    } catch (e) {}
+  }
+
+  function videoTrack(stream) {
+    try {
+      var tracks = stream && stream.getVideoTracks ? stream.getVideoTracks() : [];
+      return tracks && tracks.length ? tracks[0] : null;
+    } catch (e) { return null; }
+  }
+
+  // Which physical camera a stream came from, so a device with one camera can
+  // be told apart from a real switch.
+  function deviceIdOf(stream) {
+    try {
+      var t = videoTrack(stream);
+      var s = t && t.getSettings ? t.getSettings() : null;
+      return (s && (s.deviceId || s.groupId)) || "";
+    } catch (e) { return ""; }
+  }
+
+  function facingOf(stream) {
+    try {
+      var t = videoTrack(stream);
+      var s = t && t.getSettings ? t.getSettings() : null;
+      return (s && s.facingMode) || "";
+    } catch (e) { return ""; }
+  }
+
+  function syncFacing() {
+    if (!camSwitch) return;
+    var front = cam.facing === "user";
+    if (front) camSwitch.classList.add("front");
+    else camSwitch.classList.remove("front");
+    camSwitch.setAttribute("aria-pressed", front ? "true" : "false");
+    camSwitch.setAttribute("aria-label", front ? "Switch to rear camera" : "Switch to front camera");
+  }
+
   function stopCam() {
+    cam.gen += 1;              // discard any stream still on its way
+    cam.busy = false;
     if (cam.stream) { stopStream(cam.stream); cam.stream = null; }
     try {
       if (camVideo) {
@@ -659,30 +777,33 @@
   function openCam() {
     if (cam.open) return;
     cam.open = true;
+    cam.busy = false;
     if (camEl) camEl.classList.add("on");
     if (camBtn) camBtn.setAttribute("aria-pressed", "true");
     setCamStatus("starting camera…");
 
     if (!camSupported()) { setCamStatus("camera not available here"); return; }
 
+    var gen = ++cam.gen;
     var req;
     try {
-      req = navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" }, audio: false });
+      req = requestStream(cam.facing);
     } catch (e) {
       setCamStatus(camErrorText(e));
       return;
     }
 
     Promise.resolve(req).then(function (stream) {
-      if (!cam.open) { stopStream(stream); return; }   // closed while waiting
+      if (gen !== cam.gen || !cam.open) { stopStream(stream); return; }   // closed while waiting
       cam.stream = stream;
+      var f = facingOf(stream);
+      if (f === "user" || f === "environment") cam.facing = f;
       try { camVideo.srcObject = stream; } catch (e) {}
-      try {
-        var p = camVideo.play && camVideo.play();
-        if (p && p.catch) p.catch(function () {});
-      } catch (e) {}
+      playVideo();
+      syncFacing();
       setCamStatus("");
     }).catch(function (err) {
+      if (gen !== cam.gen) return;
       setCamStatus(camErrorText(err));
     });
   }
@@ -697,13 +818,187 @@
     return was;
   }
 
+  // Swap user/environment. The new stream is requested first and the old one is
+  // stopped only once the new one is attached, so the camera light never goes
+  // out mid-switch and never stays on for two streams. A device with a single
+  // camera either returns the same device again or rejects the constraint; both
+  // end in a readable status with the existing preview still running.
+  function switchFacing() {
+    if (!cam.open || cam.busy) return;
+    if (!camSupported()) { setCamStatus("camera not available here"); return; }
+
+    var next = cam.facing === "environment" ? "user" : "environment";
+    var prevId = deviceIdOf(cam.stream);
+    var gen = ++cam.gen;
+    cam.busy = true;
+    setCamStatus("switching…");
+
+    var req;
+    try {
+      req = requestStream(next);
+    } catch (e) {
+      cam.busy = false;
+      setCamStatus(camErrorText(e));
+      return;
+    }
+
+    Promise.resolve(req).then(function (stream) {
+      if (gen !== cam.gen || !cam.open) { stopStream(stream); cam.busy = false; return; }
+      cam.busy = false;
+
+      var nextId = deviceIdOf(stream);
+      if (cam.stream && prevId && nextId && prevId === nextId) {
+        stopStream(stream);                 // the same camera came back
+        setCamStatus("only one camera here");
+        return;
+      }
+
+      var old = cam.stream;
+      cam.stream = stream;
+      cam.facing = next;
+      try { camVideo.srcObject = stream; } catch (e) {}
+      playVideo();
+      if (old) stopStream(old);             // old tracks die only after the swap
+      syncFacing();
+      setCamStatus("");
+    }).catch(function (err) {
+      if (gen !== cam.gen) return;
+      cam.busy = false;
+      var name = (err && err.name) || "";
+      if (name === "OverconstrainedError" || name === "NotFoundError" || name === "DevicesNotFoundError") {
+        setCamStatus(next === "user" ? "no front camera" : "no rear camera");
+      } else {
+        setCamStatus(camErrorText(err));
+      }
+    });
+  }
+
+  // Grab the current video frame as a JPEG data URL, close the camera, and put
+  // the still where the fact text was. The data URL is held in a variable for
+  // this session only: a full-size camera frame is far too big for the per
+  //-creation storage quota, so nothing is written to creationStorage.
+  function capture() {
+    if (!cam.open) return;
+
+    var w = 0, h = 0, ready = 0;
+    try {
+      w = camVideo.videoWidth || 0;
+      h = camVideo.videoHeight || 0;
+      ready = typeof camVideo.readyState === "number" ? camVideo.readyState : 0;
+    } catch (e) {}
+
+    if (!w || !h || ready < 2) { setCamStatus("no picture yet"); return; }
+
+    var canvas = document.createElement("canvas");
+    canvas.width = w;
+    canvas.height = h;
+    var ctx = null;
+    try { ctx = canvas.getContext("2d"); } catch (e) { ctx = null; }
+    if (!ctx) { setCamStatus("capture not available here"); return; }
+
+    try { ctx.drawImage(camVideo, 0, 0, w, h); } catch (e) { setCamStatus("capture failed"); return; }
+
+    var url = "";
+    try { url = canvas.toDataURL("image/jpeg", 0.72); } catch (e) { url = ""; }
+    if (!url || url.indexOf("data:image") !== 0) { setCamStatus("capture failed"); return; }
+
+    closeCam();
+    showShot(url);
+    flashStatus("photo taken");
+  }
+
+  function showShot(url) {
+    shotUrl = url;
+    var img = document.createElement("img");
+    img.className = "shot fade";
+    img.setAttribute("alt", "photo from the camera");
+    img.setAttribute("role", "button");
+    img.setAttribute("aria-label", "Dismiss photo");
+    img.src = url;
+    img.addEventListener("click", dismissShot);
+
+    var token = ++renderToken;
+    bodyEl.classList.add("hidden");
+    if (appEl) appEl.classList.add("shot-mode");
+    setTimeout(function () {
+      if (token !== renderToken) return;
+      bodyEl.innerHTML = "";
+      bodyEl.appendChild(img);
+      bodyEl.classList.remove("hidden");
+    }, 120);
+  }
+
+  function dismissShot() {
+    if (!shotUrl) return;
+    shotUrl = null;
+    if (appEl) appEl.classList.remove("shot-mode");
+    render(lastHtml);
+    flashStatus(count ? "fact " + count : "");
+  }
+
   if (camBtn) camBtn.addEventListener("click", function () { openCam(); });
   if (camClose) camClose.addEventListener("click", function () { closeCam(); });
+  if (camSwitch) camSwitch.addEventListener("click", function () { switchFacing(); });
+  if (camShotBtn) camShotBtn.addEventListener("click", function () { capture(); });
+
+  // ---- on-screen orientation controls ----------------------------------
+  // The r1's own control scheme claims a triple click for its recorder, so the
+  // third side-button tap never reaches the page and a triple-tap gesture is
+  // unreachable on the device. These two buttons do the same job from the
+  // touchscreen, where nothing intercepts them.
+  var recalBtn = document.getElementById("recalBtn");
+  var tiltBtn  = document.getElementById("tiltBtn");
+
+  function syncTilt() {
+    if (!tiltBtn) return;
+    if (rotateOn) {
+      tiltBtn.classList.remove("off");
+      tiltBtn.setAttribute("aria-pressed", "true");
+      tiltBtn.setAttribute("aria-label", "Turn tilt off");
+    } else {
+      tiltBtn.classList.add("off");
+      tiltBtn.setAttribute("aria-pressed", "false");
+      tiltBtn.setAttribute("aria-label", "Turn tilt on");
+    }
+  }
+
+  function recalibrate() {
+    if (!bridge.hasSensors) { flashStatus("no tilt sensor"); return; }
+    rotateOn = true;
+    syncTilt();
+    store.set("prefs", { tilt: true });
+    startAccel();
+    startCalib(false);
+  }
+
+  function toggleTilt() {
+    if (!bridge.hasSensors) { flashStatus("no tilt sensor"); return; }
+    rotateOn = !rotateOn;
+    syncTilt();
+    store.set("prefs", { tilt: rotateOn });
+
+    if (!rotateOn) {
+      calibBuf = null;
+      if (calibTimer) { clearTimeout(calibTimer); calibTimer = null; }
+      candidate = 0;
+      streak = 0;
+      applyOrientation(0);
+      flashStatus("tilt off");
+      return;
+    }
+
+    startAccel();
+    if (calib === null) startCalib(false);
+    else { applyOrientation(0); flashStatus("tilt on"); }
+  }
+
+  if (recalBtn) recalBtn.addEventListener("click", function () { recalibrate(); });
+  if (tiltBtn) tiltBtn.addEventListener("click", function () { toggleTilt(); });
 
   // ---- input ------------------------------------------------------------
-  // One tap: a fact. Two taps: close the camera, or the creation.
-  // Three taps: re-read the accelerometer and make the current pose upright
-  // (and turn tilt back on if it was off). Four taps: tilt off.
+  // One tap: a fact. Two taps: close the camera, or the creation. A third tap
+  // is swallowed by the r1's recorder shortcut, so calibration lives on the
+  // "upright" button instead.
   var tapCount = 0;
   var tapTimer = null;
 
@@ -716,9 +1011,7 @@
       tapCount = 0;
       tapTimer = null;
       if (n === 1) onSingleTap();
-      else if (n === 2) onDoubleTap();
-      else if (n === 3) onTripleTap();
-      else onQuadTap();
+      else onDoubleTap();
     }, 350);
   });
 
@@ -731,25 +1024,6 @@
     } else {
       setStatus("close is r1-only");
     }
-  }
-
-  function onTripleTap() {
-    rotateOn = true;
-    store.set("prefs", { rotate: true });
-    if (!bridge.hasSensors) { flashStatus("no tilt sensor"); return; }
-    startAccel();
-    startCalib(false);
-  }
-
-  function onQuadTap() {
-    rotateOn = false;
-    calibBuf = null;
-    if (calibTimer) { clearTimeout(calibTimer); calibTimer = null; }
-    candidate = 0;
-    streak = 0;
-    applyOrientation(0);
-    store.set("prefs", { rotate: false });
-    flashStatus("tilt off");
   }
 
   window.addEventListener("longPressStart", function () {
@@ -785,6 +1059,7 @@
   window.addEventListener("pagehide", function () {
     stopAccel();
     closeCam();
+    if (calibTimer) { clearTimeout(calibTimer); calibTimer = null; }
   });
 
   document.addEventListener("visibilitychange", function () {
@@ -802,11 +1077,15 @@
   }).catch(function () {});
 
   store.get("prefs").then(function (p) {
-    if (p && p.rotate === false) { rotateOn = false; }
+    if (p && (p.tilt === false || p.rotate === false)) rotateOn = false;
   }).catch(function () {}).then(function () {
+    syncTilt();
+    syncFacing();
     applyOrientation(0);
-    startAccel();
-    if (rotateOn) startCalib(true);
+    if (rotateOn) {
+      startAccel();
+      startCalib(true);
+    }
   });
 })();
 </script>
