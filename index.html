@@ -14,7 +14,17 @@
     -webkit-user-select: none; user-select: none;
     -webkit-tap-highlight-color: transparent;
   }
-  #app { position: relative; width: 100%; height: 100%; padding: 14px; display: flex; flex-direction: column; }
+  body { position: relative; }
+  #app {
+    position: absolute; left: 50%; top: 50%;
+    width: 240px; height: 282px;
+    padding: 14px; display: flex; flex-direction: column;
+    transform-origin: 50% 50%;
+    transform: translate(-50%, -50%) rotate(0deg);
+  }
+  #app.landscape { padding: 10px 12px; }
+  #app.landscape #body { font-size: 11px; line-height: 1.4; margin-top: 6px; }
+  #app.landscape h1 { font-size: 14px; }
   h1 { font-size: 15px; font-weight: 600; letter-spacing: .02em; }
   #hint { font-size: 10px; color: var(--dim); margin-top: 2px; }
   #body { flex: 1; margin-top: 10px; font-size: 12px; line-height: 1.45; overflow: hidden; }
@@ -84,13 +94,17 @@
   };
 
   // ---- dom --------------------------------------------------------------
+  var appEl    = document.getElementById("app");
   var bodyEl   = document.getElementById("body");
   var statusEl = document.getElementById("status");
   var spinner  = document.getElementById("spinner");
 
+  var renderToken = 0;
   function render(html) {
+    var token = ++renderToken;
     bodyEl.classList.add("hidden");
     setTimeout(function () {
+      if (token !== renderToken) return;
       bodyEl.innerHTML = html;
       bodyEl.classList.remove("hidden");
     }, 120);
@@ -185,20 +199,207 @@
     render("<p>" + escapeHtml(text) + "</p>");
   }
 
+  // ---- orientation ------------------------------------------------------
+  // The WebView is a fixed 240 x 282 portrait surface. To show the UI
+  // upright while the device is held sideways, the app box is resized to the
+  // swapped dimensions (282 x 240) and rotated about its own centre. A
+  // 282 x 240 box rotated 90 degrees occupies exactly 240 x 282, so nothing
+  // is clipped and no counter-scale is needed.
+  var rotateOn = true;
+  var currentDeg = 0;
+  var applied = false;
+  var calib = null;    // orientation seen when the page settled after launch
+  var LANDSCAPE_SIGN = 1;   // flip to -1 if landscape reads upside-down
+
+  function applyOrientation(deg) {
+    if (applied && deg === currentDeg) return;
+    applied = true;
+    currentDeg = deg;
+    var landscape = (deg === 90 || deg === -90);
+    appEl.style.width  = (landscape ? 282 : 240) + "px";
+    appEl.style.height = (landscape ? 240 : 282) + "px";
+    appEl.style.transform = "translate(-50%, -50%) rotate(" + deg + "deg)";
+    if (landscape) appEl.classList.add("landscape");
+    else appEl.classList.remove("landscape");
+  }
+
+  function orientationOf(u) {
+    var ax = Math.abs(u.x);
+    var ay = Math.abs(u.y);
+    if (ax < 0.6 && ay < 0.6) return null;   // flat on a table, or mid-turn
+    if (ay >= ax) return u.y < 0 ? 0 : 180;
+    // Landscape: which sign means "readable" depends on whether +x points to
+    // the screen's right or left, which the docs do not settle. If the
+    // landscape view comes up upside-down relative to how you hold it, change
+    // LANDSCAPE_SIGN to -1.
+    return (u.x > 0 ? -90 : 90) * LANDSCAPE_SIGN;
+  }
+
+  // Whatever pose the page is in when it first settles becomes upright. This
+  // absorbs both the unknown sign convention of the axes and the case of
+  // launching the creation while already holding the r1 sideways.
+  function normaliseDeg(d) {
+    var v = ((d % 360) + 360) % 360;
+    return v === 180 ? 180 : (v === 90 ? 90 : (v === 270 ? -90 : 0));
+  }
+
+  // ---- accelerometer (optional) ----------------------------------------
+  function readAccel(d) {
+    if (!d) return null;
+    if (typeof d.tiltX === "number" || typeof d.tiltY === "number" || typeof d.tiltZ === "number") {
+      return { x: d.tiltX || 0, y: d.tiltY || 0, z: d.tiltZ || 0, unit: "normalised" };
+    }
+    if (typeof d.x === "number" || typeof d.y === "number" || typeof d.z === "number") {
+      return { x: d.x, y: d.y, z: d.z, unit: "normalised" };
+    }
+    if (typeof d.rawX === "number") {
+      return { x: d.rawX / 9.81, y: d.rawY / 9.81, z: d.rawZ / 9.81, unit: "ms2" };
+    }
+    return null;
+  }
+
+  function num(v) { return (typeof v === "number" && isFinite(v)) ? v : 0; }
+
+  // Direction only, so the result is the same whether the payload arrives
+  // normalised (gravity ~ 1) or in m/s^2 (gravity ~ 9.81).
+  function toUnit(a) {
+    if (!a) return null;
+    var x = num(a.x), y = num(a.y), z = num(a.z);
+    var m = Math.sqrt(x * x + y * y + z * z);
+    if (!(m > 0.05)) return null;
+    return { x: x / m, y: y / m, z: z / m, m: m };
+  }
+
+  var SMOOTH = 0.18;          // low-pass on the direction vector
+  var DWELL  = 5;             // samples a new orientation must hold (~170ms at 30Hz)
+  var SHAKE_DEV = 0.8;        // 80% deviation from the running magnitude average
+  var SHAKE_REVERSALS = 2;    // direction reversals within SHAKE_WINDOW that mean "shake"
+  var SHAKE_WINDOW = 400;
+  var SHAKE_COOLDOWN = 1000;  // ms between accepted shakes
+  var SHAKE_SETTLE = 400;     // ms of tilt suppression after a shake
+
+  var sx = 0, sy = 0, sz = 0, dirPrimed = false;
+  var magAvg = 0, magPrimed = false;
+  var px = 0, py = 0, pz = 0, prevPrimed = false;
+  var reversals = [];
+  var candidate = 0, streak = 0;
+  var lastShake = 0;
+
+  function clearScreen() {
+    if (pending) {
+      clearTimeout(pending.timer);
+      pending = null;
+    }
+    busy(false);
+    setStatus("");
+    render("<p>Ready.</p>");
+  }
+
+  // Two independent ways to recognise a shake, because the payload may be a
+  // normalised direction (constant magnitude, so deviation alone never fires)
+  // or raw m/s^2 (where magnitude spikes hard):
+  //   1. the magnitude jumps away from its running average, or
+  //   2. the direction reverses sharply at least twice in a few hundred ms.
+  // A reversal means the new vector points back against the old one, which a
+  // deliberate turn cannot do — a turn goes from one pose to another once.
+  function isShake(u, now) {
+    var byMag = false;
+    if (magPrimed) {
+      byMag = Math.abs(u.m - magAvg) / Math.max(magAvg, 0.2) > SHAKE_DEV;
+      magAvg += (u.m - magAvg) * 0.08;
+    } else { magAvg = u.m; magPrimed = true; }
+
+    var byReversal = false;
+    if (prevPrimed) {
+      var dot = u.x * px + u.y * py + u.z * pz;
+      if (dot < -0.5) {
+        reversals.push(now);
+        while (reversals.length && now - reversals[0] > SHAKE_WINDOW) reversals.shift();
+        byReversal = reversals.length >= SHAKE_REVERSALS;
+      } else if (reversals.length && now - reversals[0] > SHAKE_WINDOW) {
+        reversals.length = 0;
+      }
+    }
+    px = u.x; py = u.y; pz = u.z; prevPrimed = true;
+
+    if (!byMag && !byReversal) return false;
+    if (now - lastShake <= SHAKE_COOLDOWN) return false;
+    reversals.length = 0;
+    return true;
+  }
+
+  function onAccel(d) {
+    var u = toUnit(readAccel(d));
+    if (!u) return;
+
+    var now = Date.now();
+    if (isShake(u, now)) {
+      lastShake = now;
+      clearScreen();
+    }
+
+    // --- tilt: smoothed direction, committed on a threshold crossing ---
+    if (!dirPrimed) { sx = u.x; sy = u.y; sz = u.z; dirPrimed = true; }
+    else {
+      sx += (u.x - sx) * SMOOTH;
+      sy += (u.y - sy) * SMOOTH;
+      sz += (u.z - sz) * SMOOTH;
+    }
+
+    if (!rotateOn) return;
+    if (now - lastShake < SHAKE_SETTLE) return;
+
+    var sm = Math.sqrt(sx * sx + sy * sy + sz * sz);
+    if (!(sm > 0.05)) return;
+    var raw = orientationOf({ x: sx / sm, y: sy / sm, z: sz / sm });
+    if (raw === null) return;
+
+    if (calib === null) { calib = raw; return; }
+
+    var o = normaliseDeg(raw - calib);
+    if (o === currentDeg) { streak = 0; return; }
+    if (o === candidate) { streak += 1; }
+    else { candidate = o; streak = 1; }
+    if (streak >= DWELL) { streak = 0; applyOrientation(o); }
+  }
+
+  var accelHandle = null;
+  var accelStarted = false;
+
+  function startAccel() {
+    if (accelStarted || !bridge.hasSensors) return;
+    accelStarted = true;
+    var accel = window.creationSensors.accelerometer;
+    Promise.resolve(accel.isAvailable()).then(function (ok) {
+      if (!ok) return;
+      accelHandle = accel;
+      accel.start(onAccel, { frequency: 30 });
+    }).catch(function () {});
+  }
+
+  function stopAccel() {
+    if (accelHandle) { try { accelHandle.stop(); } catch (e) {} accelHandle = null; }
+    accelStarted = false;
+  }
+  window.addEventListener("pagehide", stopAccel);
+
   // ---- input ------------------------------------------------------------
-  var lastClick = 0;
+  // One tap: a fact. Two taps: close. Three taps: tilt-to-rotate on/off.
+  var tapCount = 0;
+  var tapTimer = null;
+  var statusTimer = null;
 
   window.addEventListener("sideClick", function () {
-    var now = Date.now();
-    if (now - lastClick < 300) {
-      lastClick = 0;
-      onDoubleTap();
-      return;
-    }
-    lastClick = now;
-    setTimeout(function () {
-      if (lastClick === now) { lastClick = 0; onSingleTap(); }
-    }, 300);
+    tapCount += 1;
+    if (tapTimer) clearTimeout(tapTimer);
+    tapTimer = setTimeout(function () {
+      var n = tapCount;
+      tapCount = 0;
+      tapTimer = null;
+      if (n === 1) onSingleTap();
+      else if (n === 2) onDoubleTap();
+      else onTripleTap();
+    }, 350);
   });
 
   function onSingleTap() { fetchFact(); }
@@ -209,6 +410,20 @@
     } else {
       setStatus("close is r1-only");
     }
+  }
+
+  function onTripleTap() {
+    rotateOn = !rotateOn;
+    if (!rotateOn) applyOrientation(0);
+    candidate = 0;
+    streak = 0;
+    setStatus(rotateOn ? "tilt on" : "tilt off");
+    store.set("prefs", { rotate: rotateOn });
+    if (statusTimer) clearTimeout(statusTimer);
+    statusTimer = setTimeout(function () {
+      statusTimer = null;
+      setStatus(count ? "fact " + count : "");
+    }, 1200);
   }
 
   window.addEventListener("longPressStart", function () {
@@ -230,47 +445,22 @@
   window.addEventListener("scrollUp",   function () { setStatus("▲"); });
   window.addEventListener("scrollDown", function () { setStatus("▼"); });
 
-  // ---- accelerometer (optional) ----------------------------------------
-  function readAccel(d) {
-    if (!d) return null;
-    if (typeof d.tiltX === "number" || typeof d.tiltY === "number" || typeof d.tiltZ === "number") {
-      return { x: d.tiltX || 0, y: d.tiltY || 0, z: d.tiltZ || 0, unit: "normalised" };
-    }
-    if (typeof d.x === "number" || typeof d.y === "number" || typeof d.z === "number") {
-      return { x: d.x, y: d.y, z: d.z, unit: "normalised" };
-    }
-    if (typeof d.rawX === "number") {
-      return { x: d.rawX / 9.81, y: d.rawY / 9.81, z: d.rawZ / 9.81, unit: "ms2" };
-    }
-    return null;
-  }
-
-  var accelHandle = null;
-  function startAccel() {
-    if (!bridge.hasSensors) return;
-    var accel = window.creationSensors.accelerometer;
-    Promise.resolve(accel.isAvailable()).then(function (ok) {
-      if (!ok) return;
-      accelHandle = accel;
-      accel.start(function (d) {
-        var a = readAccel(d);
-        if (a && a.z < -0.6) setStatus("face down");
-      }, { frequency: 30 });
-    }).catch(function () {});
-  }
-  function stopAccel() {
-    if (accelHandle) { try { accelHandle.stop(); } catch (e) {} accelHandle = null; }
-  }
-  window.addEventListener("pagehide", stopAccel);
-
   // ---- boot -------------------------------------------------------------
   store.get("state").then(function (s) {
     if (s && s.count) {
       count = s.count;
       setStatus("fact " + count);
+    } else if (!bridge.hasSensors) {
+      setStatus("no tilt sensor");
     }
+  }).catch(function () {});
+
+  store.get("prefs").then(function (p) {
+    if (p && p.rotate === false) { rotateOn = false; }
+  }).catch(function () {}).then(function () {
+    applyOrientation(0);
+    startAccel();
   });
-  startAccel();
 })();
 </script>
 </body>
