@@ -383,6 +383,96 @@
   }
   window.addEventListener("pagehide", stopAccel);
 
+  // ---- audio (optional) -------------------------------------------------
+  // A short pitched ding on each scroll, synthesised with Web Audio so there
+  // is no file and no network request. The whole layer is wrapped: if
+  // AudioContext is missing or its construction throws, every call here is a
+  // silent no-op and the rest of the page is unaffected.
+  var audio = (function () {
+    // Major pentatonic, two octaves. No interval in it sounds wrong at any
+    // step, so climbing and descending both stay musical.
+    var SCALE = [0, 2, 4, 7, 9, 12, 14, 16, 19, 21];
+    var BASE = 261.63;          // C4
+    var PEAK = 0.25;            // gain at the top of the attack
+    var FLOOR = 0.0001;         // never ramp to exactly 0: exponentialRamp throws
+    var ATTACK = 0.01;
+    var DECAY = 0.2;
+
+    var ctx = null;
+    var step = 0;
+    var broken = false;
+
+    function Ctor() {
+      return window.AudioContext || window.webkitAudioContext || null;
+    }
+
+    // Created lazily, on the first user gesture, never at page load.
+    function ensure() {
+      if (broken) return null;
+      if (ctx) return ctx;
+      var C = Ctor();
+      if (!C) { broken = true; return null; }
+      try { ctx = new C(); } catch (e) { ctx = null; broken = true; return null; }
+      return ctx;
+    }
+
+    function resume(c) {
+      try {
+        if (c.state === "suspended" && c.resume) {
+          var p = c.resume();
+          if (p && p.catch) p.catch(function () {});
+        }
+      } catch (e) {}
+    }
+
+    // Called from the side-button handler: Android blocks audio until a
+    // gesture, and the OS may suspend the context later.
+    function unlock() {
+      var c = ensure();
+      if (!c) return false;
+      resume(c);
+      return true;
+    }
+
+    function freq(i) {
+      var idx = Math.max(0, Math.min(SCALE.length - 1, i));
+      return BASE * Math.pow(2, SCALE[idx] / 12);
+    }
+
+    // dir is +1 for up, -1 for down. The step is clamped at both ends of the
+    // scale rather than climbing forever.
+    function ding(dir) {
+      var c = ensure();
+      if (!c) return false;
+      try {
+        resume(c);
+        step = Math.max(0, Math.min(SCALE.length - 1, step + dir));
+        var t = c.currentTime;
+        var osc = c.createOscillator();
+        var gain = c.createGain();
+        osc.type = "triangle";   // cuts through the r1's small speaker
+        osc.frequency.setValueAtTime(freq(step), t);
+        gain.gain.setValueAtTime(FLOOR, t);
+        gain.gain.linearRampToValueAtTime(PEAK, t + ATTACK);
+        gain.gain.exponentialRampToValueAtTime(FLOOR, t + ATTACK + DECAY);
+        osc.connect(gain);
+        gain.connect(c.destination);
+        osc.start(t);
+        osc.stop(t + ATTACK + DECAY + 0.02);
+        osc.onended = function () {
+          try { osc.disconnect(); gain.disconnect(); } catch (e) {}
+        };
+        return true;
+      } catch (e) { return false; }
+    }
+
+    return {
+      unlock: unlock,
+      ding: ding,
+      available: function () { return !broken && !!Ctor(); }
+    };
+  })();
+
   // ---- input ------------------------------------------------------------
   // One tap: a fact. Two taps: close. Three taps: tilt-to-rotate on/off.
   var tapCount = 0;
@@ -390,6 +480,7 @@
   var statusTimer = null;
 
   window.addEventListener("sideClick", function () {
+    audio.unlock();   // first gesture unlocks audio; later ones resume it
     tapCount += 1;
     if (tapTimer) clearTimeout(tapTimer);
     tapTimer = setTimeout(function () {
@@ -442,8 +533,16 @@
     setStatus("");
   });
 
-  window.addEventListener("scrollUp",   function () { setStatus("▲"); });
-  window.addEventListener("scrollDown", function () { setStatus("▼"); });
+  // Scroll wheel: a ding that climbs the scale going up and descends going
+  // down, plus the existing direction readout.
+  window.addEventListener("scrollUp", function () {
+    var ok = audio.ding(1);
+    setStatus(ok ? "▲" : "▲ no audio");
+  });
+  window.addEventListener("scrollDown", function () {
+    var ok = audio.ding(-1);
+    setStatus(ok ? "▼" : "▼ no audio");
+  });
 
   // ---- boot -------------------------------------------------------------
   store.get("state").then(function (s) {
